@@ -196,6 +196,8 @@ namespace VolumeDetail
         {
             Console.WriteLine();
 
+            ConsoleColor before = Console.ForegroundColor;
+
             if (errors.Count > 0)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
@@ -203,14 +205,15 @@ namespace VolumeDetail
                 {
                     Console.WriteLine($"An error occurred for {volume.Type} volume with ID {volume} - Please check this manually.");
                 }
-                Console.ForegroundColor = ConsoleColor.White;
+                
             }
             else
             {
                 Console.ForegroundColor = ConsoleColor.Green;
                 Console.WriteLine("No errors occurred");
-                Console.ForegroundColor = ConsoleColor.White;
             }
+
+            Console.ForegroundColor = before;
         }
 
         private static void Save(List<Volume> volumes)

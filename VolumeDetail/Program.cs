@@ -89,36 +89,38 @@ namespace VolumeDetail
             return volumes;
         }
 
-        private static int _completed;
+        private static List<Task> _tasks;
         private static async Task DetailVolumesAsync(List<Volume> volumes)
         {
+            Console.Title = "Volume Detail - 0%";
             Console.Write("Detailing volumes... ");
-            List<Task> tasks = new List<Task>();
-
-            Task bar = ProgressBar(volumes.Count);
+            _tasks = new List<Task>();
 
             foreach (Volume volume in volumes)
             {
-                Task task = DetailVolumeAsync(volume).ContinueWith(finishedTask =>
+                Task task = DetailVolumeAsync(volume);
+                task = task.ContinueWith(finishedTask =>
                 {
-                    _completed++;
+                    Console.Title = $"Volume Detail - {(int) Math.Ceiling(((decimal) _tasks.Count(x => x.IsCompleted) + 1) / volumes.Count * 100)}%";
                     if (!finishedTask.IsCompletedSuccessfully)
                     {
                         errors.Add(volume);
                     }
                 });
 
-                tasks.Add(task);
+                _tasks.Add(task);
                 await Task.Delay(100);
             }
-            await Task.WhenAll(tasks);
 
-            await bar;
+            await Task.WhenAll(_tasks);
+
+            Console.Title = "Volume Detail";
+            Console.WriteLine("done");
         }
 
         private static async Task DetailVolumeAsync(Volume volume)
         {
-            await Task.Delay(1);
+            await Task.Delay(100);
 
             string commandOut =
                 await _cmd.GetCommandOutputAsync($"ibmcloud sl {volume.Type} volume-detail {volume.Id}");
@@ -161,20 +163,6 @@ namespace VolumeDetail
             }
 
             fileVolume.SnapshotMaxSize = (int) Math.Ceiling(max);
-        }
-
-        private static async Task ProgressBar(int total)
-        {
-            using (ProgressBar progress = new ProgressBar()) 
-            {
-                while (_completed < total)
-                {
-                    progress.Report((double) _completed / total);
-                    await Task.Delay(100);
-                }
-            }
-
-            Console.WriteLine("done");
         }
 
         private static string ReplaceFirst(string text, string search, string replace)

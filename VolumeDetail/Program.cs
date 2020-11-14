@@ -99,12 +99,68 @@ namespace VolumeDetail
 
             foreach (Volume volume in volumes)
             {
-                tasks.Add(DetailVolumeAsync(volume));
-                await Task.Delay(1);
+                Task task = DetailVolumeAsync(volume).ContinueWith(finishedTask =>
+                {
+                    _completed++;
+                    if (!finishedTask.IsCompletedSuccessfully)
+                    {
+                        errors.Add(volume);
+                    }
+                });
+
+                tasks.Add(task);
+                await Task.Delay(100);
             }
             await Task.WhenAll(tasks);
 
             await bar;
+        }
+
+        private static async Task DetailVolumeAsync(Volume volume)
+        {
+            await Task.Delay(1);
+
+            string commandOut =
+                await _cmd.GetCommandOutputAsync($"ibmcloud sl {volume.Type} volume-detail {volume.Id}");
+            string[] outputs = commandOut.Replace(" ", "").Replace("   ", "").Split("\n");
+
+            string row = outputs.First(x => x.StartsWith("Username"));
+            volume.Username = ReplaceFirst(row, "Username", "");
+
+            row = outputs.First(x => x.StartsWith("Capacity(GB)"));
+            volume.Capacity = decimal.Parse(ReplaceFirst(row, "Capacity(GB)", ""));
+
+            row = outputs.First(x => x.StartsWith("EnduranceTierPerIOPS"));
+            volume.EnduranceTierPerIops = decimal.Parse(ReplaceFirst(row, "EnduranceTierPerIOPS", ""));
+
+            row = outputs.First(x => x.StartsWith("Datacenter"));
+            volume.Datacenter = ReplaceFirst(row, "Datacenter", "");
+
+            if (volume.Type == "file")
+            {
+                await DetailSnapshotAsync(volume);
+            }
+        }
+
+        private static async Task DetailSnapshotAsync(Volume fileVolume)
+        {
+            await Task.Delay(1);
+
+            string commandOut = await _cmd.GetCommandOutputAsync($"ibmcloud sl file snapshot-list {fileVolume.Id}");
+            string[] foundVolumes = commandOut.Split("\n").Skip(1).ToArray();
+
+            decimal max = 0;
+            foreach (string volume in foundVolumes)
+            {
+                try
+                {
+                    decimal bytes = decimal.Parse(volume.Split("   ")[3]);
+                    if (bytes / 1073741824 > max) max = bytes / 1073741824;
+                }
+                catch {}
+            }
+
+            fileVolume.SnapshotMaxSize = (int) Math.Ceiling(max);
         }
 
         private static async Task ProgressBar(int total)
@@ -119,66 +175,6 @@ namespace VolumeDetail
             }
 
             Console.WriteLine("done");
-        }
-
-        private static async Task DetailVolumeAsync(Volume volume)
-        {
-            await Task.Delay(1);
-
-            try
-            {
-                string commandOut =
-                    await _cmd.GetCommandOutputAsync($"ibmcloud sl {volume.Type} volume-detail {volume.Id}");
-                string[] outputs = commandOut.Replace(" ", "").Replace("   ", "").Split("\n");
-
-                string row = outputs.First(x => x.StartsWith("Username"));
-                volume.Username = ReplaceFirst(row, "Username", "");
-
-                row = outputs.First(x => x.StartsWith("Capacity(GB)"));
-                volume.Capacity = decimal.Parse(ReplaceFirst(row, "Capacity(GB)", ""));
-
-                row = outputs.First(x => x.StartsWith("EnduranceTierPerIOPS"));
-                volume.EnduranceTierPerIops = decimal.Parse(ReplaceFirst(row, "EnduranceTierPerIOPS", ""));
-
-                row = outputs.First(x => x.StartsWith("Datacenter"));
-                volume.Datacenter = ReplaceFirst(row, "Datacenter", "");
-
-                if (volume.Type == "file")
-                {
-                    await DetailSnapshotAsync(volume);
-                }
-            }
-            catch
-            {
-                errors.Add(volume);
-            }
-
-            _completed += 1;
-        }
-
-        private static async Task DetailSnapshotAsync(Volume fileVolume)
-        {
-            await Task.Delay(1);
-
-            try
-            {
-                string commandOut = await _cmd.GetCommandOutputAsync($"ibmcloud sl file snapshot-list {fileVolume.Id}");
-                string[] foundVolumes = commandOut.Split("\n").Skip(1).ToArray();
-
-                decimal max = 0;
-                foreach (string volume in foundVolumes)
-                {
-                    try
-                    {
-                        decimal bytes = decimal.Parse(volume.Split("   ")[3]);
-                        if (bytes / 1073741824 > max) max = bytes / 1073741824;
-                    }
-                    catch {}
-                }
-
-                fileVolume.SnapshotMaxSize = (int) Math.Ceiling(max);
-            }
-            catch { }
         }
 
         private static string ReplaceFirst(string text, string search, string replace)

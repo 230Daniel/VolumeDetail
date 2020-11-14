@@ -11,6 +11,7 @@ namespace VolumeDetail
     internal class Program
     {
         private static Cmd _cmd = new Cmd();
+        private static List<Volume> errors = new List<Volume>();
 
         static void Main()
         {
@@ -19,10 +20,12 @@ namespace VolumeDetail
 
         private static async Task MainAsync()
         {
-            await LoginAsync();
+            Console.Title = "Volume Detail";
 
+            await LoginAsync();
             List<Volume> volumes = await GetAllVolumesAsync();
             await DetailVolumesAsync(volumes);
+            OutputErrors();
             Save(volumes);
         }
 
@@ -125,7 +128,8 @@ namespace VolumeDetail
 
             try
             {
-                string commandOut = await _cmd.GetCommandOutputAsync($"ibmcloud sl {volume.Type} volume-detail {volume.Id}");
+                string commandOut =
+                    await _cmd.GetCommandOutputAsync($"ibmcloud sl {volume.Type} volume-detail {volume.Id}");
                 string[] outputs = commandOut.Replace(" ", "").Replace("   ", "").Split("\n");
 
                 string row = outputs.First(x => x.StartsWith("Username"));
@@ -145,9 +149,9 @@ namespace VolumeDetail
                     await DetailSnapshotAsync(volume);
                 }
             }
-            catch (Exception e)
+            catch
             {
-
+                errors.Add(volume);
             }
 
             _completed += 0.75;
@@ -162,18 +166,18 @@ namespace VolumeDetail
                 string commandOut = await _cmd.GetCommandOutputAsync($"ibmcloud sl file snapshot-list {fileVolume.Id}");
                 string[] foundVolumes = commandOut.Split("\n").Skip(1).ToArray();
 
-                int maxBytes = 0;
+                decimal max = 0;
                 foreach (string volume in foundVolumes)
                 {
                     try
                     {
-                        int bytes = int.Parse(volume.Split("   ")[3]);
-                        if(bytes > maxBytes) maxBytes = bytes;
+                        decimal bytes = decimal.Parse(volume.Split("   ")[3]);
+                        if (bytes / 1073741824 > max) max = bytes / 1073741824;
                     }
                     catch {}
                 }
 
-                fileVolume.SnapshotMaxSize = maxBytes;
+                fileVolume.SnapshotMaxSize = (int) Math.Ceiling(max);
             }
             catch { }
         }
@@ -188,12 +192,34 @@ namespace VolumeDetail
             return text.Substring(0, pos) + replace + text.Substring(pos + search.Length);
         }
 
+        private static void OutputErrors()
+        {
+            Console.WriteLine();
+
+            if (errors.Count > 0)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                foreach (Volume volume in errors)
+                {
+                    Console.WriteLine($"An error occurred for {volume.Type} volume with ID {volume} - Please check this manually.");
+                }
+                Console.ForegroundColor = ConsoleColor.White;
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("No errors occurred");
+                Console.ForegroundColor = ConsoleColor.White;
+            }
+        }
+
         private static void Save(List<Volume> volumes)
         {
-            string csv = volumes.Aggregate("Id, Type, Username, Capacity (gigabytes), Endurance Tier per IOPS, Datacenter, Largest snapshot size (bytes)\n", 
+            string csv = volumes.Aggregate("Id, Type, Username, Capacity GB, Endurance Tier per IOPS, Datacenter, Largest snapshot size GB\n", 
                 (current, volume) => current + $"{volume.Id}, {volume.Type}, {volume.Username}, {volume.Capacity}, {volume.EnduranceTierPerIops}, {volume.Datacenter}, {volume.SnapshotMaxSize}\n");
 
-            Console.WriteLine("\nEnter a filename for the csv output file");
+            Console.WriteLine();
+            Console.WriteLine("Enter a filename for the csv output file");
             Console.Write("> ");
             string filename = Console.ReadLine();
 
@@ -207,8 +233,8 @@ namespace VolumeDetail
                 }
                 catch
                 {
-                    Console.WriteLine($"{filename}.csv is not a valid filename.\n\n");
-                    Console.WriteLine("Enter a filename for the csv output file...");
+                    Console.WriteLine($"{filename}.csv could not be saved.\n");
+                    Console.WriteLine("Enter a filename for the csv output file");
                     Console.Write("> ");
                     filename = Console.ReadLine();
                 }

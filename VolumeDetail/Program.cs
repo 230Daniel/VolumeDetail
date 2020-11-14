@@ -89,7 +89,7 @@ namespace VolumeDetail
             return volumes;
         }
 
-        private static double _completed;
+        private static int _completed;
         private static async Task DetailVolumesAsync(List<Volume> volumes)
         {
             Console.Write("Detailing volumes... ");
@@ -124,7 +124,6 @@ namespace VolumeDetail
         private static async Task DetailVolumeAsync(Volume volume)
         {
             await Task.Delay(1);
-            _completed += 0.25;
 
             try
             {
@@ -154,7 +153,7 @@ namespace VolumeDetail
                 errors.Add(volume);
             }
 
-            _completed += 0.75;
+            _completed += 1;
         }
 
         private static async Task DetailSnapshotAsync(Volume fileVolume)

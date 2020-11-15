@@ -89,30 +89,29 @@ namespace VolumeDetail
             return volumes;
         }
 
-        private static List<Task> _tasks;
         private static async Task DetailVolumesAsync(List<Volume> volumes)
         {
             Console.Title = "Volume Detail - 0%";
             Console.Write("Detailing volumes... ");
-            _tasks = new List<Task>();
+            List<Task> tasks = new List<Task>();
 
             foreach (Volume volume in volumes)
             {
                 Task task = DetailVolumeAsync(volume);
                 task = task.ContinueWith(finishedTask =>
                 {
-                    Console.Title = $"Volume Detail - {(int) Math.Ceiling(((decimal) _tasks.Count(x => x.IsCompleted) + 1) / volumes.Count * 100)}%";
+                    Console.Title = $"Volume Detail - {(int) Math.Ceiling(((decimal) tasks.Count(x => x.IsCompleted) + 1) / volumes.Count * 100)}% ({tasks.Count(x => x.IsCompleted) + 1} / {volumes.Count})";
                     if (!finishedTask.IsCompletedSuccessfully)
                     {
                         errors.Add(volume);
                     }
                 });
 
-                _tasks.Add(task);
+                tasks.Add(task);
                 await Task.Delay(100);
             }
 
-            await Task.WhenAll(_tasks);
+            await Task.WhenAll(tasks);
 
             Console.Title = "Volume Detail";
             Console.WriteLine("done");
@@ -186,7 +185,7 @@ namespace VolumeDetail
                 Console.ForegroundColor = ConsoleColor.Red;
                 foreach (Volume volume in errors)
                 {
-                    Console.WriteLine($"An error occurred for {volume.Type} volume with ID {volume} - Please check this manually.");
+                    Console.WriteLine($"An error occurred for {volume.Type} volume with ID {volume.Id} - Please check this manually or try again.");
                 }
                 
             }
